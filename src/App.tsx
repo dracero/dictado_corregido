@@ -85,7 +85,6 @@ export default function App() {
       const recognition = new SpeechRecognition();
       recognition.continuous = true;
       recognition.interimResults = true;
-      recognition.lang = 'es-ES';
 
       recognition.onresult = (event: SpeechRecognitionEvent) => {
         let interimTranscript = '';
@@ -109,8 +108,17 @@ export default function App() {
       };
 
       recognition.onend = () => {
-        if (isListening) {
-          recognition.start(); // Keep listening if we didn't manually stop
+        // Only restart if we intentionally want to keep listening
+        // and aren't moving on to correct the text
+        if (isListening && !isCorrecting && activeStep === 1) {
+          try {
+            recognition.start();
+          } catch (e) {
+            console.warn('Recognition already started or cannot start', e);
+          }
+        } else {
+          // We finished listening, ensure state reflects that
+          setIsListening(false);
         }
       };
 
@@ -122,14 +130,33 @@ export default function App() {
 
   const toggleListening = () => {
     if (isListening) {
-      recognitionRef.current?.stop();
       setIsListening(false);
-      if (rawText.trim()) setActiveStep(2);
+      recognitionRef.current?.stop();
+      // Only proceed to step 2 if they actually want to correct it and we don't have a correction yet
+      if (rawText.trim() && !correctedText) setActiveStep(2);
     } else {
       setError(null);
-      recognitionRef.current?.start();
-      setIsListening(true);
+      // Try to forcefully abort any ghost processes
+      try { recognitionRef.current?.abort(); } catch (e) { }
+
+      // Restart fresh if we already corrected something previously
+      if (correctedText) {
+        setRawText('');
+        setCorrectedText('');
+      }
+
       setActiveStep(1);
+
+      // Delay starting slightly to ensure the abort() has fully resolved in the browser's audio stack
+      setTimeout(() => {
+        setIsListening(true);
+        try {
+          recognitionRef.current?.start();
+        } catch (e) {
+          console.warn('Recognition start error', e);
+          setIsListening(false);
+        }
+      }, 50);
     }
   };
 
@@ -150,7 +177,7 @@ export default function App() {
         messages: [
           {
             role: "system",
-            content: `Eres un Agente Corrector experto en redacción. Tu tarea es recibir una transcripción de voz (que puede tener errores gramaticales, falta de puntuación o repeticiones) y convertirla en un texto profesional, fluido y bien estructurado en español.\n\nReglas:\n1. No cambies el sentido original de lo que se dijo.\n2. Mejora la puntuación y la gramática.\n3. Elimina muletillas (eh, mmm, este...).\n4. Si el texto es largo, usa párrafos.\n5. Devuelve SOLO el texto corregido en formato Markdown.`
+            content: `You are an expert editing and proofreading agent. Your task is to receive a voice transcription (which may contain grammatical errors, lack of punctuation, or repetitions) and turn it into a professional, fluent, and well-structured text.\n\nCRITICAL RULES:\n1. IDENTIFY THE LANGUAGE OF the original text and output the corrected version IN THE EXACT SAME LANGUAGE. DO NOT TRANSLATE IT TO SPANISH.\n2. Do NOT change the original meaning of what was said.\n3. Improve punctuation and grammar appropriately for the identified language.\n4. Remove filler words (uh, um, you know...). \n5. If the text is long, use paragraphs.\n6. Return ONLY the corrected text in Markdown format, without any conversational introductory or concluding text.`
           },
           {
             role: "user",
@@ -267,7 +294,18 @@ export default function App() {
             <div className="relative mb-6">
               <div className="h-64 bg-black/40 rounded-xl border border-zinc-800 p-4 font-serif text-lg overflow-y-auto custom-scrollbar">
                 {rawText ? (
-                  <p className="text-zinc-300 leading-relaxed italic">"{rawText}"</p>
+                  <div className="relative group min-h-full">
+                    <p className="text-zinc-300 leading-relaxed italic pr-8">"{rawText}"</p>
+                    {!isListening && (
+                      <button
+                        onClick={() => { setRawText(''); setActiveStep(1); }}
+                        className="absolute top-0 right-0 p-2 text-zinc-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 rounded-lg"
+                        title="Borrar texto y empezar de nuevo"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
                 ) : (
                   <div className="h-full flex flex-col items-center justify-center text-zinc-600 text-center">
                     <History className="w-10 h-10 mb-3 opacity-20" />
