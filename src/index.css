@@ -1,0 +1,58 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-serif: "Cormorant Garamond", serif;
+}
+
+@layer base {
+  body {
+    @apply bg-[#0a0a0a] text-zinc-100 antialiased;
+  }
+}
+
+.agent-card {
+  @apply bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 transition-all duration-300;
+}
+
+.agent-card.active {
+  @apply border-emerald-500/50 ring-1 ring-emerald-500/20 bg-emerald-500/5;
+}
+
+.glow-emerald {
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.1);
+}
+
+.markdown-body {
+  @apply max-w-none text-zinc-300;
+}
+
+.markdown-body h1, .markdown-body h2, .markdown-body h3 {
+  @apply text-white font-bold mt-6 mb-4;
+}
+
+.markdown-body h1 { @apply text-2xl; }
+.markdown-body h2 { @apply text-xl; }
+.markdown-body h3 { @apply text-lg; }
+
+.markdown-body p {
+  @apply mb-4 leading-relaxed;
+}
+
+.markdown-body ul, .markdown-body ol {
+  @apply mb-4 ml-6 list-disc;
+}
+
+.markdown-body li {
+  @apply mb-1;
+}
+
+.markdown-body strong {
+  @apply text-white font-semibold;
+}
+
+.markdown-body blockquote {
+  @apply border-l-4 border-emerald-500/50 pl-4 italic my-4 text-zinc-400;
+}

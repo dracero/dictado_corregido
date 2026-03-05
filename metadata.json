@@ -1,0 +1,7 @@
+{
+  "name": "Agentes de Redacción",
+  "description": "Un flujo de trabajo colaborativo con tres agentes: Oidor (transcripción), Corrector (refinamiento) y Publicador (exportación).",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
