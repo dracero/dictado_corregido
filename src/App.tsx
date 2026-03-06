@@ -77,6 +77,15 @@ export default function App() {
   const [activeStep, setActiveStep] = useState(1); // 1: Oidor, 2: Corrector, 3: Publicador
 
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const isListeningRef = useRef(isListening);
+  const isCorrectingRef = useRef(isCorrecting);
+  const activeStepRef = useRef(activeStep);
+
+  useEffect(() => {
+    isListeningRef.current = isListening;
+    isCorrectingRef.current = isCorrecting;
+    activeStepRef.current = activeStep;
+  }, [isListening, isCorrecting, activeStep]);
 
   // Initialize Speech Recognition
   useEffect(() => {
@@ -87,37 +96,39 @@ export default function App() {
       recognition.interimResults = true;
 
       recognition.onresult = (event: SpeechRecognitionEvent) => {
-        let interimTranscript = '';
         let finalTranscript = '';
 
         for (let i = event.resultIndex; i < event.results.length; ++i) {
           if (event.results[i].isFinal) {
             finalTranscript += event.results[i][0].transcript;
-          } else {
-            interimTranscript += event.results[i][0].transcript;
           }
         }
 
-        setRawText(prev => prev + finalTranscript);
+        if (finalTranscript) {
+          setRawText(prev => prev + finalTranscript);
+        }
       };
 
       recognition.onerror = (event: any) => {
         console.error('Speech recognition error', event.error);
-        setError(`Error de reconocimiento: ${event.error}`);
-        setIsListening(false);
+        if (event.error !== 'aborted' && event.error !== 'no-speech') {
+          setError(`Error de reconocimiento: ${event.error}`);
+        }
+        if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+          setIsListening(false);
+        }
       };
 
       recognition.onend = () => {
         // Only restart if we intentionally want to keep listening
-        // and aren't moving on to correct the text
-        if (isListening && !isCorrecting && activeStep === 1) {
+        if (isListeningRef.current && !isCorrectingRef.current && activeStepRef.current === 1) {
           try {
             recognition.start();
           } catch (e) {
             console.warn('Recognition already started or cannot start', e);
+            setIsListening(false);
           }
         } else {
-          // We finished listening, ensure state reflects that
           setIsListening(false);
         }
       };
@@ -126,18 +137,16 @@ export default function App() {
     } else {
       setError('Tu navegador no soporta el reconocimiento de voz.');
     }
-  }, [isListening]);
+  }, []);
 
   const toggleListening = () => {
     if (isListening) {
       setIsListening(false);
-      recognitionRef.current?.stop();
+      try { recognitionRef.current?.stop(); } catch (e) { }
       // Only proceed to step 2 if they actually want to correct it and we don't have a correction yet
       if (rawText.trim() && !correctedText) setActiveStep(2);
     } else {
       setError(null);
-      // Try to forcefully abort any ghost processes
-      try { recognitionRef.current?.abort(); } catch (e) { }
 
       // Restart fresh if we already corrected something previously
       if (correctedText) {
@@ -146,22 +155,30 @@ export default function App() {
       }
 
       setActiveStep(1);
+      setIsListening(true);
 
-      // Delay starting slightly to ensure the abort() has fully resolved in the browser's audio stack
-      setTimeout(() => {
-        setIsListening(true);
+      try {
+        recognitionRef.current?.start();
+      } catch (e) {
+        console.warn('Recognition start error, aborting and trying again', e);
         try {
-          recognitionRef.current?.start();
-        } catch (e) {
-          console.warn('Recognition start error', e);
-          setIsListening(false);
-        }
-      }, 50);
+          recognitionRef.current?.abort();
+          setTimeout(() => {
+            // After abort, we might need a tick before starting again
+            if (isListeningRef.current) {
+              try { recognitionRef.current?.start(); } catch (err) { }
+            }
+          }, 100);
+        } catch (err) { }
+      }
     }
   };
 
   const handleCorrect = async () => {
     if (!rawText.trim()) return;
+
+    const textToCorrect = rawText;
+    setRawText('');
 
     setIsCorrecting(true);
     setActiveStep(2);
@@ -181,7 +198,7 @@ export default function App() {
           },
           {
             role: "user",
-            content: `Texto a corregir:\n"${rawText}"`
+            content: `Texto a corregir:\n"${textToCorrect}"`
           }
         ]
       });
@@ -196,6 +213,7 @@ export default function App() {
     } catch (err: any) {
       console.error(err);
       setError("Hubo un problema al corregir el texto. Por favor, intenta de nuevo.");
+      setRawText(textToCorrect);
     } finally {
       setIsCorrecting(false);
     }
